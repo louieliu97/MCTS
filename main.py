@@ -9,7 +9,7 @@ boardFrac = 0.85
 
 seconds_per_move=5
 timed_match=False
-search_n=100
+search_n=20
 
 from Opponent import Opponent
 

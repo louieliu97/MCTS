@@ -52,7 +52,7 @@ def find_reached(board, c):
 
 
 class GoStatus(object):
-    def __init__(self, komi=7.0):
+    def __init__(self, komi=5.5):
         self.board = np.zeros(shape=(9,9))
         self.to_play = colormap['black']
         self.ko=None

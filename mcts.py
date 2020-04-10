@@ -1,7 +1,7 @@
 import math
 import collections
 import numpy as np
-import bottleneck
+import threading
 
 import go
 from utils import *
@@ -27,11 +27,14 @@ class DummyNode:
 c_EXPLORE = 1.34
 # Dirichlet noise alpha parameter
 D_NOISE_ALPHA = 0.03
-# Max number of steps before we selection action with
-# highest action probability
-MAX_STEPS = 100
 # Board Size
 B_SIZE = 9
+# Max number of steps before we selection action with
+# highest action probability. This is around the # of
+# plays currently made. Thus, we want slightly more than
+# the number of points on the board because capturing
+# can extended the number of moves played in a game.
+MAX_STEPS = B_SIZE**2*1.5
 # Found through trial and error
 RES_THRESH = -0.75
 ##########################################################################
@@ -115,7 +118,6 @@ class MCTSNode:
 
         :return: Expanded leaf MCTSNode
         """
-        print("Enter selection")
         curr = self
         while True:
             # We encountered a leaf node
@@ -143,7 +145,6 @@ class MCTSNode:
         :param action: action for current status which leads to child node
         :return: Child MCTSNode
         """
-        print("Enter expansion")
         if move not in self.children:
             new_status = self.status.copy()
             new_status.play_move(coord_flat2tuple(move))
@@ -156,7 +157,6 @@ class MCTSNode:
         :param value: Value estimate to backpropagate
         :param up_to: The node to backpropagate to.
         """
-        print("Enter backprop")
         self.W += value
         if self.parent is None or self is up_to:
             return
@@ -169,7 +169,6 @@ class MCTSNode:
         :param value: Value estimate to backpropagate
         :param up_to: The node to backpropagate to.
         """
-        print("Enter pre-backprop")
         self.is_expanded = True
         self.add_noise()
         self.N += 1
@@ -185,8 +184,6 @@ class MCTSNode:
         Checking if the game is over.
         :return: True if game is over. False if not.
         """
-        print("done: ", self.status.n)
-        print("game over:", self.status.is_game_over())
         return self.status.is_game_over() or self.status.n > MAX_STEPS
 
     def add_noise(self):
@@ -195,6 +192,19 @@ class MCTSNode:
         """
         dirch = np.random.dirichlet([D_NOISE_ALPHA] * 82)
         self.child_prior = self.child_prior * 0.76 + dirch * 0.25
+
+def threaded(fn):
+    """
+    Function to help class functions become threaded.
+    :param fn: The function to thread
+    :return: the thread
+    """
+    def wrapper(*args, **kwargs):
+        thread = threading.Thread(target=fn, args=args, kwargs=kwargs)
+        thread.start()
+        return thread
+    return wrapper
+
 
 class MCTSOpponent:
     """
@@ -252,29 +262,23 @@ class MCTSOpponent:
         # Currently computer will always be white.
         return 1 if curr_status.get_score() > 0 else -1
 
+    @threaded
     def tree_search(self):
         """
         Performs a simulation on a selected leaf node. Then backpropagate the result of
         the simulation.
         :return: The leaf node that was expanded
         """
-        print("Enter Tree Search")
         # Selection and expansion
         leaf = self.root.selection()
-        print("Finish Selection")
         if leaf.is_done():
-            print("Leaf's done")
             value = 1 if leaf.status.get_score() > 0 else -1
             # No simulation needed as the game is over, backpropagate
-            print("BackPropagating")
             leaf.backpropagation(value, self.root)
-            print("Done backprop")
         else:
             # Simulation
             value = self.simulation(leaf.status)
-            print("Done simulation")
             leaf.pre_backpropagation(value, self.root)
-            print("Done prebackprop")
         return leaf
 
     def suggest_move(self):
@@ -284,8 +288,32 @@ class MCTSOpponent:
         """
         curr_n = self.root.N
         print("suggesting move")
+        start = time.time()
         while self.root.N < curr_n + self.search_n:
-            leaf = self.tree_search()
+            t1 = self.tree_search()
+            t2 = self.tree_search()
+            t3 = self.tree_search()
+            t4 = self.tree_search()
+            t5 = self.tree_search()
+            t6 = self.tree_search()
+            t7 = self.tree_search()
+            t8 = self.tree_search()
+            t9 = self.tree_search()
+            t0 = self.tree_search()
+
+            t1.join()
+            t2.join()
+            t3.join()
+            t4.join()
+            t5.join()
+            t6.join()
+            t7.join()
+            t8.join()
+            t9.join()
+            t0.join()
+
+            print("N: ", self.root.N)
+        print("time: ", time.time()-start)
         return self.pick_best_move()
 
     def pick_best_move(self):
@@ -300,10 +328,6 @@ class MCTSOpponent:
         ind = np.argpartition(self.root.child_N, -10)[-10:]
         ind = ind[np.argsort(self.root.child_N[ind])]
         pick = coord_flat2tuple(ind[-1])
-        print("ind ",ind)
-        print("pick: ",pick)
-        print(self.root.child_N)
-        print(self.root.Q)
         while not self.status.is_move_legal(pick):
             ind = ind[:-1]
             pick = coord_flat2tuple(ind[-1])
