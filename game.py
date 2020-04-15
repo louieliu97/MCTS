@@ -1,3 +1,11 @@
+##############################################################################
+# Written by: Author at https://github.com/VainF/AlphaDoge
+# Purpose: This is the implementation of the UI for playing Go. This was
+# directly lifted from the github repo as it is open source and not written
+# by either Louie Liu or Kian Rossitto.
+#############################################################################
+
+
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *

@@ -1,12 +1,20 @@
+##############################################################################
+# Written by: Louie Liu and Kian Rossitto
+# Date: 4/12/20
+# Purpose: These classes make up the implementation of MCTS for playing go.
+#############################################################################
+
 import math
 import collections
 import numpy as np
+import time
 import threading
+from concurrent.futures import Future
 
 import go
 from utils import *
 
-import time
+
 
 class DummyNode:
     """
@@ -62,6 +70,32 @@ class MCTSNode:
         self.child_W = np.zeros([B_SIZE*B_SIZE+1], dtype=np.float32)
         self.child_prior = np.zeros([B_SIZE*B_SIZE+1], dtype=np.float32)
         self.children = {}
+
+    def get_move_num(self, tup=None):
+        """
+        Get the number version of the the current move. If
+        conversion is required, provide the tuple to convert.
+        :param tup: The tuple to convert to a number
+        :return: The move number as an integer.
+        """
+        if tup is None:
+            tup = self.move
+
+        if tup is None: return 81
+        return tup[0] * 9 + tup[1]
+
+    def get_move_tuple(self, num):
+        """
+        Get the tuple version of the the current move. If
+        conversion is required, provide the int to convert.
+        :param num: The number to convert to a tuple
+        :return: The move number as a tuple.
+        """
+        if num is None:
+            num = self.move
+
+        if num==81: return None
+        return num//9, num%9
 
     @property
     def N(self):
@@ -147,7 +181,7 @@ class MCTSNode:
         """
         if move not in self.children:
             new_status = self.status.copy()
-            new_status.play_move(coord_flat2tuple(move))
+            new_status.play_move(self.get_move_tuple(move))
             self.children[move] = MCTSNode(new_status, move, parent=self)
         return self.children[move]
 
@@ -193,6 +227,12 @@ class MCTSNode:
         dirch = np.random.dirichlet([D_NOISE_ALPHA] * 82)
         self.child_prior = self.child_prior * 0.76 + dirch * 0.25
 
+def call_with_future(fn, future, args, kwargs):
+    try:
+        result = fn(*args, **kwargs)
+        future.set_result(result)
+    except Exception as exc:
+        future.set_exception(exc)
 def threaded(fn):
     """
     Function to help class functions become threaded.
@@ -200,11 +240,10 @@ def threaded(fn):
     :return: the thread
     """
     def wrapper(*args, **kwargs):
-        thread = threading.Thread(target=fn, args=args, kwargs=kwargs)
-        thread.start()
-        return thread
+        future = Future()
+        threading.Thread(target=call_with_future, args=(fn, future, args, kwargs)).start()
+        return future
     return wrapper
-
 
 class MCTSOpponent:
     """
@@ -237,6 +276,7 @@ class MCTSOpponent:
         self.status = status
         self.result = 0
 
+    @threaded
     def simulation(self, status):
         """
         Does the simulation part of the MCTS process. Currently is in a simple
@@ -250,7 +290,7 @@ class MCTSOpponent:
             legal_moves = np.argwhere(curr_status.get_legal_moves())
             legal_moves = legal_moves.reshape(legal_moves.shape[0])
             # Randomly choose a move from the legal moves
-            move_choice = coord_flat2tuple(np.random.choice(legal_moves))
+            move_choice = self.root.get_move_tuple(np.random.choice(legal_moves))
             # Make my move
             if my_move:
                 curr_status.play_move(move_choice)
@@ -262,7 +302,6 @@ class MCTSOpponent:
         # Currently computer will always be white.
         return 1 if curr_status.get_score() > 0 else -1
 
-    @threaded
     def tree_search(self):
         """
         Performs a simulation on a selected leaf node. Then backpropagate the result of
@@ -271,14 +310,24 @@ class MCTSOpponent:
         """
         # Selection and expansion
         leaf = self.root.selection()
+        start = time.time()
         if leaf.is_done():
             value = 1 if leaf.status.get_score() > 0 else -1
             # No simulation needed as the game is over, backpropagate
             leaf.backpropagation(value, self.root)
         else:
             # Simulation
-            value = self.simulation(leaf.status)
+            f1 = self.simulation(leaf.status)
+            f2 = self.simulation(leaf.status)
+            f3 = self.simulation(leaf.status)
+
+            v1 = f1.result()
+            v2 = f2.result()
+            v3 = f3.result()
+
+            value = v1 + v2 + v3
             leaf.pre_backpropagation(value, self.root)
+        print("time for simulation: ", time.time() - start)
         return leaf
 
     def suggest_move(self):
@@ -288,32 +337,9 @@ class MCTSOpponent:
         """
         curr_n = self.root.N
         print("suggesting move")
-        start = time.time()
         while self.root.N < curr_n + self.search_n:
-            t1 = self.tree_search()
-            t2 = self.tree_search()
-            t3 = self.tree_search()
-            t4 = self.tree_search()
-            t5 = self.tree_search()
-            t6 = self.tree_search()
-            t7 = self.tree_search()
-            t8 = self.tree_search()
-            t9 = self.tree_search()
-            t0 = self.tree_search()
+            self.tree_search()
 
-            t1.join()
-            t2.join()
-            t3.join()
-            t4.join()
-            t5.join()
-            t6.join()
-            t7.join()
-            t8.join()
-            t9.join()
-            t0.join()
-
-            print("N: ", self.root.N)
-        print("time: ", time.time()-start)
         return self.pick_best_move()
 
     def pick_best_move(self):
@@ -327,10 +353,10 @@ class MCTSOpponent:
         # if it is a valid move.
         ind = np.argpartition(self.root.child_N, -10)[-10:]
         ind = ind[np.argsort(self.root.child_N[ind])]
-        pick = coord_flat2tuple(ind[-1])
+        pick = self.root.get_move_tuple(ind[-1])
         while not self.status.is_move_legal(pick):
             ind = ind[:-1]
-            pick = coord_flat2tuple(ind[-1])
+            pick = self.root.get_move_tuple(ind[-1])
 
         return pick
 
@@ -358,7 +384,7 @@ class MCTSOpponent:
         no longer needed.
         :param coord: The coordinate to play at.
         """
-        self.root = self.root.expansion(coord_tuple2flat(coord))
+        self.root = self.root.expansion(self.root.get_move_num(coord))
         self.status = self.root.status
         del self.root.parent.children
 

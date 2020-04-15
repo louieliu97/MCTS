@@ -1,3 +1,10 @@
+##############################################################################
+# Written by: Author at https://github.com/VainF/AlphaDoge
+# Purpose: This is the module dealing with the rules of go. This was
+# directly lifted from the github repo as it is open source and not written
+# by either Louie Liu or Kian Rossitto.
+#############################################################################
+
 from utils import *
 import numpy as np
 from copy import deepcopy

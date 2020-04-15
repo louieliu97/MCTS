@@ -1,3 +1,10 @@
+##############################################################################
+# Written by: Author at https://github.com/VainF/AlphaDoge
+# Purpose: This is the main file controlling the whole application. This was
+# directly lifted from the github repo as it is open source and not written
+# by either Louie Liu or Kian Rossitto.
+#############################################################################
+
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget ,QGridLayout, QVBoxLayout, QLabel, QPushButton
 from PyQt5.QtCore import QSize

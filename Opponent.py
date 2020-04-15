@@ -1,8 +1,12 @@
-import numpy as np
-import time
-import threading
+##############################################################################
+# Written by: Louie Liu and Kian Rossitto
+# Date: 4/12/20
+# Purpose: This class uses the MCTS implementation to create a threaded
+# opponent MCTS player. This example was based on one found in the project at
+# https://github.com/VainF/AlphaDoge
+#############################################################################
+
 from PyQt5.QtCore import *
-from utils import *
 
 from mcts import MCTSOpponent
 
@@ -17,7 +21,7 @@ class Opponent(QThread):
         self.player.play_move(coord)
 
     def reset(self):
-        self.player.rest()
+        self.player.reset()
 
     def run(self):
         coord = self.player.suggest_move()
